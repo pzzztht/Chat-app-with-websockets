@@ -1,73 +1,403 @@
-* { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
-body { background-color: #eef2f5; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+/* ==========================================================================
+   1. Reset & Layout Setup
+   ========================================================================== */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
 
-.header { margin: 20px 0; }
-.auth-card { background: white; padding: 25px; border-radius: 8px; width: 320px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-.auth-card input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; }
-.auth-card button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-.auth-card p { text-align: center; margin-top: 10px; color: #007bff; cursor: pointer; font-size: 14px; }
+body {
+    background-color: #0f141d;
+    color: #e1e6ed;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
 
-/* 2-Column Chat Layout */
-.chat-wrapper { display: flex; width: 850px; height: 550px; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
-.chat-sidebar { width: 280px; background: #f7f9fa; border-right: 1px solid #e1e8ed; display: flex; flex-direction: column; padding: 15px; }
-.user-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.logout-btn { background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+/* Stacks title directly above the main chat app */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
 
-.search-box input { width: 100%; padding: 8px 12px; border-radius: 20px; border: 1px solid #ccc; outline: none; margin-bottom: 12px; }
-.chat-channels { flex: 1; overflow-y: auto; }
-.chat-channels h4 { font-size: 12px; color: #888; margin: 12px 0 6px 0; text-transform: uppercase; }
+.title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffffff;
+    text-align: center;
+    margin: 0;
+}
 
-.channel-item, .user-item { padding: 10px; border-radius: 6px; cursor: pointer; margin-bottom: 4px; list-style: none; font-size: 14px; }
-.channel-item.active, .user-item.active { background: #007bff; color: white; }
+/* ==========================================================================
+   2. Main Container & Expand States
+   ========================================================================== */
+#chat-main {
+    display: flex;
+    width: 360px; /* Collapsed width for side list view */
+    height: 620px;
+    background-color: #1a2130;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
-.chat-window { flex: 1; display: flex; flex-direction: column; }
-.chat-header { padding: 15px; background: #fcfcfc; border-bottom: 1px solid #eee; }
-.message-container { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+/* Expanded state when chat opens side-by-side */
+#chat-main.expanded {
+    width: 900px !important;
+    max-width: 95vw;
+}
 
-.message-left, .message-right { list-style: none; max-width: 70%; padding: 10px 14px; border-radius: 12px; font-size: 14px; word-wrap: break-word; }
-.message-left { background: #e9ecef; align-self: flex-start; }
-.message-right { background: #007bff; color: white; align-self: flex-end; }
-.message-left span, .message-right span { display: block; font-size: 10px; margin-top: 4px; opacity: 0.7; }
+/* Standalone focus mode (hides sidebar completely if desired) */
+#chat-main.focus-mode .sidebar {
+    display: none !important;
+}
 
-.message-form { display: flex; padding: 12px; background: #fff; border-top: 1px solid #eee; }
-.message-form input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; outline: none; }
-.message-form button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; margin-left: 8px; cursor: pointer; }
+#chat-main.focus-mode #chat-window {
+    width: 100%;
+    display: flex !important;
+}
 
-/* Profile Picture Styles */
-.profile-avatar {
-    width: 35px;
-    height: 35px;
+/* ==========================================================================
+   3. Sidebar & Profile Layout
+   ========================================================================== */
+.sidebar {
+    width: 360px !important;
+    min-width: 360px !important;
+    background-color: #161c28;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+/* User Profile Header Fix */
+.user-profile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.user-profile-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-profile img, #user-avatar {
+    width: 42px !important;
+    height: 42px !important;
     border-radius: 50%;
-    background-color: #ddd;
     object-fit: cover;
 }
 
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+#logged-username {
+    font-size: 15px;
+    font-weight: 600;
+    color: #ffffff;
 }
 
-.user-info span {
-    font-weight: bold;
-    font-size: 15px;
+#logout-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(231, 76, 60, 0.12);
+    color: #ff5c5c;
+    border: 1px solid rgba(231, 76, 60, 0.25);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+#logout-btn:hover {
+    background-color: #e74c3c;
+    color: #ffffff;
+    border-color: #e74c3c;
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+#logout-btn:active {
+    transform: scale(0.95);
+}
+
+#logout-btn svg {
+    display: block;
+    transition: transform 0.2s ease;
+}
+
+#logout-btn:hover svg {
+    transform: translateX(2px); /* Subtle shift animation on hover */
+}
+/* ==========================================================================
+   4. Search Bar & Conversations
+   ========================================================================== */
+.search-container {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+#user-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    background-color: #202838;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    color: #ffffff;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#user-search-input:focus {
+    border-color: #f1c40f;
+}
+
+.conversations-header {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.conversations-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    flex: 1;
 }
 
 .user-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 6px;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 10px;
     cursor: pointer;
-    margin-bottom: 4px;
-    list-style: none;
-    font-size: 14px;
+    background-color: transparent;
+    transition: background-color 0.2s ease;
+}
+
+.user-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.user-item.active {
+    background-color: rgba(241, 196, 15, 0.12);
+    border-left: 3px solid #f1c40f;
 }
 
 .user-item img {
-    width: 28px;
-    height: 28px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
-    background: #fff;
+    flex-shrink: 0;
+    object-fit: cover;
 }
+
+.conv-info {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.conv-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.conv-subtitle {
+    font-size: 12px;
+    color: #8a8d93;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.clients-total-footer {
+    font-size: 11px;
+    color: #64748b;
+    text-align: center;
+    padding-top: 12px;
+    margin-top: auto;
+}
+
+/* ==========================================================================
+   5. Active Chat Box (Right Panel)
+   ========================================================================== */
+#chat-window {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #121722;
+    min-width: 0;
+}
+
+#chat-window.hidden {
+    display: none !important;
+}
+
+.chat-header {
+    padding: 16px 20px;
+    background-color: #181f2d;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.chat-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.back-btn {
+    background: #2a344d;
+    color: #f1c40f;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s;
+}
+
+.back-btn:hover {
+    background: #354263;
+}
+
+/* ==========================================================================
+   6. Messages Area & Input Form
+   ========================================================================== */
+#message-container {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    list-style: none;
+}
+
+.message-left, .message-right {
+    max-width: 70%;
+    display: flex;
+    flex-direction: column;
+}
+
+.message-left { align-self: flex-start; }
+.message-right { align-self: flex-end; }
+
+.message-left .message {
+    background-color: #252e3f;
+    color: #e2e8f0;
+    border-radius: 14px 14px 14px 2px;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.message-right .message {
+    background-color: #f1c40f;
+    color: #0f141d;
+    font-weight: 500;
+    border-radius: 14px 14px 2px 14px;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.message-left span, .message-right span {
+    font-size: 10px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+.message-right span { align-self: flex-end; }
+
+#message-form {
+    padding: 16px;
+    background-color: #181f2d;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#message-input {
+    flex: 1;
+    padding: 12px 16px;
+    background-color: #202838;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    color: #ffffff;
+    outline: none;
+    font-size: 14px;
+}
+
+#message-input:focus {
+    border-color: #f1c40f;
+}
+
+.send-btn {
+    background-color: #f1c40f;
+    color: #0f141d;
+    border: none;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(241, 196, 15, 0.25);
+    transition: all 0.2s ease;
+}
+
+.send-btn:hover {
+    background-color: #f39c12;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(241, 196, 15, 0.35);
+}
+
+.send-btn:active {
+    transform: scale(0.92);
+}
+
+.send-btn svg {
+    margin-left: 2px; /* Center-align paper plane visually */
+    display: block;
+}
+
+/* ==========================================================================
+   7. Scrollbars
+   ========================================================================== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }

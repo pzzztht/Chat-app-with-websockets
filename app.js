@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth')
 const userRoutes = require('./routes/users')
 const messageRoutes = require('./routes/messages')
 const setupSocket = require('./sockets/chatSocket')
+const conversationRoutes = require('./routes/conversations.route')
 
 const app = express()
 const server = http.createServer(app)
@@ -29,6 +30,7 @@ app.use(express.static(path.join(__dirname, 'public')))
 app.use('/api', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/messages', messageRoutes)
+app.use('/api/conversations', conversationRoutes);
 
 // Setup Socket.io Event Handling
 setupSocket(io)
