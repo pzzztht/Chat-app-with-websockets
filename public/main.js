@@ -1,35 +1,127 @@
+/* ==========================================================================
+   iChat Client Application Logic (main.js)
+   ========================================================================== */
+
+// Local Storage & Global State
 let authToken = localStorage.getItem('token');
 let currentUser = JSON.parse(localStorage.getItem('user')) || null;
 let socket = null;
 let currentConversationId = null;
 let isLoginMode = true;
 
-const authContainer = document.getElementById('auth-container');
-const chatContainer = document.getElementById('chat-main');
-const messageContainer = document.getElementById('message-container');
-const messageForm = document.getElementById('message-form');
-const messageInput = document.getElementById('message-input');
-const clientsTotal = document.getElementById('client-total');
+// Audio Notification Tone
 const messageTone = new Audio('/message-tone.mp3');
 
+// Group Chat Base64 SVG Avatar
+const GROUP_AVATAR_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f1c40f'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
 
-if (authToken && currentUser) {
-    showChatUI();
-    initSocket();
-} else {
-    showAuthUI();
+// ==========================================================================
+// 1. App Initialization & DOM Binding
+// ==========================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Intercept form submissions to prevent default page reloads
+    setupFormListeners();
+
+    // Setup live search handler
+    setupSearchListener();
+
+    // Check existing login status
+    if (authToken && currentUser) {
+        showChatUI();
+        initSocket();
+    } else {
+        showAuthUI();
+    }
+});
+
+function setupFormListeners() {
+    const singleAuthForm = document.getElementById('auth-form');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const messageForm = document.getElementById('message-form');
+
+    if (singleAuthForm) {
+        singleAuthForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            submitAuth();
+        });
+    }
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            isLoginMode = true;
+            submitAuth();
+        });
+    }
+
+    if (registerForm) {
+        registerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            isLoginMode = false;
+            submitAuth();
+        });
+    }
+
+    if (messageForm) {
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleSendMessage();
+        });
+    }
 }
 
-function toggleAuthMode() {
-    isLoginMode = !isLoginMode;
-    document.getElementById('auth-title').innerText = isLoginMode ? 'Login' : 'Register';
-    document.getElementById('auth-toggle').innerText = isLoginMode ? 'Need an account? Register' : 'Have an account? Login';
+// Helper to safely get the sidebar list element
+function getListContainer() {
+    return document.getElementById('conversations-list-container') || document.getElementById('conversations-list');
+}
+
+// ==========================================================================
+// 2. Authentication UI & Network Logic
+// ==========================================================================
+
+function toggleAuthMode(event, mode) {
+    if (event) event.preventDefault();
+
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+
+    if (mode) {
+        isLoginMode = (mode === 'login');
+        if (mode === 'register') {
+            if (loginForm) loginForm.classList.add('hidden');
+            if (registerForm) registerForm.classList.remove('hidden');
+        } else {
+            if (registerForm) registerForm.classList.add('hidden');
+            if (loginForm) loginForm.classList.remove('hidden');
+        }
+    } else {
+        isLoginMode = !isLoginMode;
+        const titleEl = document.getElementById('auth-title');
+        const toggleEl = document.getElementById('auth-toggle');
+        if (titleEl) titleEl.innerText = isLoginMode ? 'Login' : 'Register';
+        if (toggleEl) toggleEl.innerText = isLoginMode ? 'Need an account? Register' : 'Have an account? Login';
+    }
 }
 
 async function submitAuth() {
-    const username = document.getElementById('auth-username').value.trim();
-    const password = document.getElementById('auth-password').value.trim();
+    const usernameInput = document.getElementById('auth-username') || document.getElementById('login-username') || document.getElementById('reg-username');
+    const passwordInput = document.getElementById('auth-password') || document.getElementById('login-password') || document.getElementById('reg-password');
+
+    if (!usernameInput || !passwordInput) {
+        alert('Authentication inputs missing from form');
+        return;
+    }
+
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value.trim();
     const endpoint = isLoginMode ? 'login' : 'register';
+
+    if (!username || !password) {
+        alert('Please fill out all fields.');
+        return;
+    }
 
     try {
         const res = await fetch(`/api/${endpoint}`, {
@@ -37,8 +129,9 @@ async function submitAuth() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
         });
+
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        if (!res.ok) throw new Error(data.error || 'Authentication failed');
 
         authToken = data.token;
         currentUser = data.user;
@@ -52,7 +145,55 @@ async function submitAuth() {
     }
 }
 
-// Socket listener updates previews in real-time
+function showAuthUI() {
+    const authContainer = document.getElementById('auth-container');
+    const chatContainer = document.getElementById('chat-main');
+
+    if (authContainer) {
+        authContainer.style.display = 'block';
+        authContainer.classList.remove('hidden');
+    }
+    if (chatContainer) {
+        chatContainer.style.display = 'none';
+        chatContainer.classList.add('hidden');
+    }
+}
+
+function showChatUI() {
+    const authContainer = document.getElementById('auth-container');
+    const chatContainer = document.getElementById('chat-main');
+
+    if (authContainer) {
+        authContainer.style.display = 'none';
+        authContainer.classList.add('hidden');
+    }
+    if (chatContainer) {
+        chatContainer.style.display = 'flex';
+        chatContainer.classList.remove('hidden');
+    }
+
+    const loggedUsername = document.getElementById('logged-username');
+    const loggedAvatar = document.getElementById('logged-avatar') || document.getElementById('user-avatar');
+
+    if (loggedUsername && currentUser) loggedUsername.innerText = currentUser.username;
+    if (loggedAvatar && currentUser) {
+        loggedAvatar.src = currentUser.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentUser.username)}`;
+    }
+
+    // Default view shows sidebar first
+    showSidebar();
+    loadConversations();
+}
+
+function logout() {
+    localStorage.clear();
+    window.location.reload();
+}
+
+// ==========================================================================
+// 3. Socket.IO Real-time Connection
+// ==========================================================================
+
 function initSocket() {
     socket = io({ auth: { token: authToken } });
 
@@ -61,32 +202,60 @@ function initSocket() {
     });
 
     socket.on('clients-total', (count) => {
+        const clientsTotal = document.getElementById('client-total') || document.getElementById('clients-total');
         if (clientsTotal) clientsTotal.innerText = `Total Clients: ${count}`;
     });
 
+    // FIXED: Receive real-time messages for both group and direct conversations
     socket.on('receive-conversation-message', (data) => {
         const currentUserId = currentUser.id || currentUser._id;
         
-        // Update side panel subtitle preview
+        // Update sidebar preview subtitle dynamically
         const targetId = data.conversationId || 'group';
         const previewEl = document.getElementById(`preview-${targetId}`);
         if (previewEl) {
             previewEl.innerText = targetId === 'group' ? `${data.sender}: ${data.message}` : data.message;
         }
 
-        if (data.conversationId === currentConversationId && data.senderId !== currentUserId) {
+        // Display incoming message bubble if viewing this active chat session
+        const isCurrentRoom = String(data.conversationId) === String(currentConversationId);
+        if (isCurrentRoom) {
             try { messageTone.play(); } catch (e) {}
-            addMessageToUI(false, data);
+            addMessageToUI(String(data.senderId) === String(currentUserId), data);
         }
     });
 }
 
-// Get the conversations list DOM element (supports both possible ID names in your HTML)
-function getListContainer() {
-    return document.getElementById('conversations-list-container') || document.getElementById('conversations-list');
+// ==========================================================================
+// 4. Conversation Side Panel & Single Chat Navigation
+// ==========================================================================
+
+function openSingleChatView(titleName) {
+    const sidebar = document.querySelector('.sidebar') || document.getElementById('sidebar');
+    const chatWindow = document.getElementById('chat-window');
+    const titleEl = document.getElementById('current-chat-title');
+
+    if (titleEl) titleEl.innerText = titleName;
+
+    if (sidebar) sidebar.classList.add('hidden');
+    if (chatWindow) chatWindow.classList.remove('hidden');
+
+    const container = getListContainer();
+    if (container) {
+        container.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+    }
+    const activeEl = document.getElementById(`conv-${currentConversationId}`);
+    if (activeEl) activeEl.classList.add('active');
 }
 
-// Fetch all existing conversations for current user
+function showSidebar() {
+    const sidebar = document.querySelector('.sidebar') || document.getElementById('sidebar');
+    const chatWindow = document.getElementById('chat-window');
+
+    if (chatWindow) chatWindow.classList.add('hidden');
+    if (sidebar) sidebar.classList.remove('hidden');
+}
+
 async function loadConversations() {
     if (!authToken || !currentUser) return;
 
@@ -103,8 +272,6 @@ async function loadConversations() {
     }
 }
 
-
-// Fetch public group chat latest message preview
 async function getGroupLatestMessage() {
     try {
         const res = await fetch(`/api/messages/filtered?targetUserId=group`, {
@@ -122,16 +289,11 @@ async function getGroupLatestMessage() {
     return 'Public Room';
 }
 
-// Clean base64-encoded SVG avatar for Group Chat (prevents string escaping issues)
-const GROUP_AVATAR_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f1c40f'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
-
-// Render conversations side panel
 async function renderConversationsList(conversations = []) {
     const container = getListContainer();
     if (!container) return;
     container.innerHTML = '';
 
-    // Fetch latest group chat preview text
     const groupPreviewText = await getGroupLatestMessage();
 
     // 1. Group Chat Item
@@ -142,20 +304,20 @@ async function renderConversationsList(conversations = []) {
         <img src="${GROUP_AVATAR_SVG}" alt="Group Chat" style="background: #2a344d; padding: 4px; border-radius: 50%;">
         <div class="conv-info">
             <span class="conv-title">Group Chat</span>
-            <span class="conv-subtitle" id="preview-group">${groupPreviewText}</span>
+            <span class="conv-subtitle" id="preview-group">${escapeHTML(groupPreviewText)}</span>
         </div>
     `;
     groupLi.onclick = () => selectGroupChat();
     container.appendChild(groupLi);
 
-    // 2. Direct 1-on-1 Conversations
+    // 2. Direct 1-on-1 Items
     conversations.forEach(conv => {
         const userId = currentUser.id || currentUser._id;
-        const otherUser = conv.users.find(u => u._id !== userId) || conv.users[0];
+        const otherUser = conv.users.find(u => String(u._id) !== String(userId)) || conv.users[0];
         const convName = (otherUser && otherUser.username) ? otherUser.username : "User";
         const avatar = (otherUser && otherUser.avatar) 
             ? otherUser.avatar 
-            : `https://api.dicebear.com/7.x/bottts/svg?seed=${convName}`;
+            : `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(convName)}`;
 
         const lastMsgText = conv.latestMessage 
             ? (typeof conv.latestMessage === 'string' ? conv.latestMessage : conv.latestMessage.message)
@@ -165,78 +327,53 @@ async function renderConversationsList(conversations = []) {
         li.className = `user-item ${currentConversationId === conv._id ? 'active' : ''}`;
         li.id = `conv-${conv._id}`;
         li.innerHTML = `
-            <img src="${avatar}" alt="${convName}">
+            <img src="${avatar}" alt="${escapeHTML(convName)}">
             <div class="conv-info">
-                <span class="conv-title">${convName}</span>
-                <span class="conv-subtitle" id="preview-${conv._id}">${lastMsgText}</span>
+                <span class="conv-title">${escapeHTML(convName)}</span>
+                <span class="conv-subtitle" id="preview-${conv._id}">${escapeHTML(lastMsgText)}</span>
             </div>
         `;
         li.onclick = () => selectConversation(conv._id, convName);
+        
+        // Auto join user to all their direct conversation rooms on load
+        if (socket) socket.emit('join-conversation', conv._id);
+        
         container.appendChild(li);
     });
 }
 
-// Select Group Chat
 async function selectGroupChat() {
     currentConversationId = 'group';
-
-    const titleEl = document.getElementById('current-chat-title');
-    if (titleEl) titleEl.innerText = 'Group Chat';
-
-    const chatMain = document.getElementById('chat-main');
-    const chatWindow = document.getElementById('chat-window');
-
-    if (chatMain) chatMain.classList.add('expanded');
-    if (chatWindow) chatWindow.classList.remove('hidden');
-
-    const container = getListContainer();
-    if (container) {
-        container.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-    }
-    const groupEl = document.getElementById('conv-group');
-    if (groupEl) groupEl.classList.add('active');
+    openSingleChatView('Group Chat');
 
     if (socket) socket.emit('join-conversation', 'group');
-
     await loadConversationMessages('group');
 }
 
-// Select Direct Message Conversation
 async function selectConversation(conversationId, titleName) {
     currentConversationId = conversationId;
-
-    const titleEl = document.getElementById('current-chat-title');
-    if (titleEl) titleEl.innerText = titleName;
-
-    const chatMain = document.getElementById('chat-main');
-    const chatWindow = document.getElementById('chat-window');
-
-    if (chatMain) chatMain.classList.add('expanded');
-    if (chatWindow) chatWindow.classList.remove('hidden');
-
-    const container = getListContainer();
-    if (container) {
-        container.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-    }
-    const activeEl = document.getElementById(`conv-${conversationId}`);
-    if (activeEl) activeEl.classList.add('active');
+    openSingleChatView(titleName);
 
     if (socket) socket.emit('join-conversation', conversationId);
-
     await loadConversationMessages(conversationId);
 }
 
-// User Search Handler
-async function handleUserSearch() {
+// User Search Logic
+function setupSearchListener() {
     const searchInput = document.getElementById('user-search-input');
-    if (!searchInput) return;
-    const query = searchInput.value.trim();
-
-    if (!query) {
-        loadConversations();
-        return;
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            if (!query) {
+                loadConversations();
+            } else {
+                handleUserSearch(query);
+            }
+        });
     }
+}
 
+async function handleUserSearch(query) {
     try {
         const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
@@ -250,15 +387,15 @@ async function handleUserSearch() {
 
         const userId = currentUser.id || currentUser._id;
         users.forEach(u => {
-            if (u._id === userId) return;
+            if (String(u._id) === String(userId)) return;
 
-            const avatarSrc = u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.username}`;
+            const avatarSrc = u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.username)}`;
             const li = document.createElement('li');
             li.className = 'user-item';
             li.innerHTML = `
-                <img src="${avatarSrc}" alt="${u.username}">
+                <img src="${avatarSrc}" alt="${escapeHTML(u.username)}">
                 <div class="conv-info">
-                    <span class="conv-title">${u.username}</span>
+                    <span class="conv-title">${escapeHTML(u.username)}</span>
                     <span class="conv-subtitle">Click to chat</span>
                 </div>
             `;
@@ -270,20 +407,6 @@ async function handleUserSearch() {
     }
 }
 
-// Update search input handler to restore conversation list when search is cleared
-const searchInput = document.getElementById('user-search-input');
-if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.trim();
-        if (!query) {
-            loadConversations(); // 👈 Restores Group Chat & Conversations when input is empty
-        } else {
-            handleUserSearch();
-        }
-    });
-}
-
-// Open or create a conversation with a target user ID
 async function createOrOpenConversation(targetUserId, targetUsername) {
     try {
         const userId = currentUser.id || currentUser._id;
@@ -309,7 +432,11 @@ async function createOrOpenConversation(targetUserId, targetUsername) {
             return;
         }
 
+        const searchInput = document.getElementById('user-search-input');
         if (searchInput) searchInput.value = '';
+
+        // Join room and open chat immediately
+        if (socket) socket.emit('join-conversation', conversation._id);
 
         await loadConversations();
         selectConversation(conversation._id, targetUsername);
@@ -318,33 +445,64 @@ async function createOrOpenConversation(targetUserId, targetUsername) {
     }
 }
 
-// Load message history for a given room
+// ==========================================================================
+// 5. Messaging Logic & Rendering
+// ==========================================================================
+
 async function loadConversationMessages(conversationId) {
     try {
         const res = await fetch(`/api/messages/filtered?targetUserId=${conversationId}`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
         const messages = await res.json();
+        
+        const messageContainer = document.getElementById('message-container');
         if (messageContainer) messageContainer.innerHTML = '';
 
         const userId = currentUser.id || currentUser._id;
-        messages.forEach(msg => {
-            const isOwn = msg.senderId === userId;
-            addMessageToUI(isOwn, {
-                _id: msg._id,
-                sender: msg.sender,
-                message: msg.message,
-                createdAt: msg.createdAt
+        if (Array.isArray(messages)) {
+            messages.forEach(msg => {
+                const isOwn = String(msg.senderId) === String(userId);
+                addMessageToUI(isOwn, {
+                    _id: msg._id,
+                    sender: msg.sender,
+                    senderId: msg.senderId,
+                    message: msg.message,
+                    createdAt: msg.createdAt
+                });
             });
-        });
+        }
     } catch (err) {
         console.error('Failed to load history:', err);
     }
 }
 
+function handleSendMessage() {
+    const messageInput = document.getElementById('message-input');
+    if (!messageInput || !currentConversationId) return;
 
-// Render message bubble
+    const messageText = messageInput.value.trim();
+    if (!messageText) return;
+
+    const userId = currentUser.id || currentUser._id;
+    const messageData = {
+        conversationId: currentConversationId,
+        senderId: userId,
+        sender: currentUser.username,
+        message: messageText,
+        createdAt: new Date().toISOString()
+    };
+
+    // Send over socket
+    if (socket) {
+        socket.emit('send-conversation-message', messageData);
+    }
+
+    messageInput.value = '';
+}
+
 function addMessageToUI(isOwnMessage, data) {
+    const messageContainer = document.getElementById('message-container');
     if (!messageContainer) return;
 
     if (data._id && document.getElementById(`msg-${data._id}`)) {
@@ -360,44 +518,22 @@ function addMessageToUI(isOwnMessage, data) {
         : 'Just now';
 
     li.innerHTML = `
-        <p class="message">${data.message}</p>
-        <span>${data.sender} • ${formattedTime}</span>
+        <p class="message">${escapeHTML(data.message)}</p>
+        <span>${escapeHTML(data.sender)} • ${formattedTime}</span>
     `;
 
     messageContainer.appendChild(li);
     messageContainer.scrollTop = messageContainer.scrollHeight;
 }
 
-// Back Button Action to hide Chat Window & reduce container width
-function showSidebar() {
-    const chatMain = document.getElementById('chat-main');
-    const chatWindow = document.getElementById('chat-window');
-
-    if (chatMain) chatMain.classList.remove('expanded');
-    if (chatWindow) chatWindow.classList.add('hidden');
-}
-
-function showAuthUI() {
-    if (authContainer) authContainer.style.display = 'block';
-    if (chatContainer) chatContainer.style.display = 'none';
-}
-
-function showChatUI() {
-    if (authContainer) authContainer.style.display = 'none';
-    if (chatContainer) chatContainer.style.display = 'flex';
-
-    const loggedUsername = document.getElementById('logged-username');
-    const loggedAvatar = document.getElementById('logged-avatar');
-
-    if (loggedUsername) loggedUsername.innerText = currentUser.username;
-    if (loggedAvatar) {
-        loggedAvatar.src = currentUser.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.username}`;
-    }
-
-    loadConversations();
-}
-
-function logout() {
-    localStorage.clear();
-    window.location.reload();
+// Utility to safely render user text input
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;'
+    }[tag] || tag));
 }

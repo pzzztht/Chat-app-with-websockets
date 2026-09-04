@@ -1,55 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>iChat</title>
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
-    <!-- Main Outer Wrapper to keep title centered above the app -->
     <div class="app-container">
-
-        <!-- App Title Header -->
+        <!-- Main Logo/Title Header -->
         <h1 class="title">iChat 💬</h1>
 
-        <!-- Chat Container -->
-        <div id="chat-main">
+        <!-- 1. Auth Box (Login & Register Form) -->
+        <div id="auth-container" class="auth-card">
+            
+            <!-- Login Form -->
+            <form id="login-form">
+                <h2>Welcome Back</h2>
+                <p class="auth-subtitle">Sign in to continue chatting</p>
+                
+                <div class="input-group">
+                    <label for="login-username">Username</label>
+                    <input type="text" id="login-username" placeholder="Enter your username" required autocomplete="off">
+                </div>
 
-            <!-- Left Sidebar Panel -->
+                <div class="input-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" placeholder="Enter your password" required>
+                </div>
+
+                <button type="submit" class="auth-btn">Log In</button>
+
+                <p class="auth-toggle-text">
+                    Don't have an account? 
+                    <a href="#" onclick="toggleAuthMode(event, 'register')">Register</a>
+                </p>
+            </form>
+
+            <!-- Register Form (Hidden by default) -->
+            <form id="register-form" class="hidden">
+                <h2>Create Account</h2>
+                <p class="auth-subtitle">Join iChat to get started</p>
+                
+                <div class="input-group">
+                    <label for="reg-username">Username</label>
+                    <input type="text" id="reg-username" placeholder="Choose a username" required autocomplete="off">
+                </div>
+
+                <div class="input-group">
+                    <label for="reg-password">Password</label>
+                    <input type="password" id="reg-password" placeholder="Create a password" required>
+                </div>
+
+                <button type="submit" class="auth-btn">Sign Up</button>
+
+                <p class="auth-toggle-text">
+                    Already have an account? 
+                    <a href="#" onclick="toggleAuthMode(event, 'login')">Log In</a>
+                </p>
+            </form>
+
+        </div>
+
+        <!-- 2. Chat Container (Hidden until logged in) -->
+        <div id="chat-main" class="hidden">
+            
+            <!-- Left Sidebar -->
             <div class="sidebar">
-
-                <!-- Logged User Profile Bar -->
                 <div class="user-profile">
                     <div class="user-profile-info">
                         <img id="user-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=ppp" alt="Avatar">
-                        <span id="logged-username">ppp</span>
+                        <span id="logged-username">Username</span>
                     </div>
                     <button id="logout-btn" onclick="logout()" title="Logout">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"
-                            fill="currentColor">
-                            <path
-                                d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
                         </svg>
                         <span>Logout</span>
                     </button>
                 </div>
 
-                <!-- Search Input -->
                 <div class="search-container">
                     <input type="text" id="user-search-input" placeholder="Search users or chats...">
                 </div>
 
-                <!-- Conversations Section -->
                 <div class="conversations-header">CONVERSATIONS</div>
                 <ul id="conversations-list" class="conversations-list">
-                    <!-- Conversations render dynamically here -->
+                    <!-- Dynamic conversation items -->
                 </ul>
 
-                <!-- Footer Client Count -->
                 <div class="clients-total-footer" id="clients-total">Total Clients: 1</div>
             </div>
 
@@ -61,15 +101,14 @@
                 </div>
 
                 <ul id="message-container">
-                    <!-- Chat messages render dynamically here -->
+                    <!-- Dynamic messages -->
                 </ul>
 
                 <form id="message-form">
                     <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
                     <button type="submit" class="send-btn" aria-label="Send message">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"
-                            fill="currentColor">
-                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                         </svg>
                     </button>
                 </form>
@@ -81,5 +120,4 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="main.js"></script>
 </body>
-
 </html>

@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken')
+const mongoose = require('mongoose')
 const Message = require('../models/Message')
 const Conversation = require('../models/conversation')
 
@@ -46,7 +47,7 @@ module.exports = (io) => {
             }
         })
 
-        // Handle Conversation Messages (Rooms Mode)
+        // Handle Messages (Group & DM Rooms)
         socket.on('send-conversation-message', async (data) => {
             try {
                 const { conversationId, message } = data;
@@ -64,10 +65,12 @@ module.exports = (io) => {
                     message: message
                 });
 
-                // Update latest message reference in Conversation document
-                await Conversation.findByIdAndUpdate(conversationId, {
-                    latestMessage: newMsg._id
-                });
+                // Update Conversation document if it's a valid MongoDB ObjectId
+                if (conversationId !== 'group' && mongoose.Types.ObjectId.isValid(conversationId)) {
+                    await Conversation.findByIdAndUpdate(conversationId, {
+                        latestMessage: newMsg._id
+                    });
+                }
 
                 const msgPayload = {
                     _id: newMsg._id,
@@ -78,85 +81,75 @@ module.exports = (io) => {
                     createdAt: newMsg.createdAt
                 };
 
-                // Broadcast to all other sockets in this room
-                socket.to(conversationId).emit('receive-conversation-message', msgPayload);
+                if (conversationId !== 'group' && mongoose.Types.ObjectId.isValid(conversationId)) {
+                    const conversation = await Conversation.findById(conversationId).select('users');
+                    const recipientSocketIds = (conversation?.users || [])
+                        .flatMap(id => connectedUsers[String(id)]?.sockets || []);
+
+                    [...new Set(recipientSocketIds)].forEach(socketId => {
+                        io.to(socketId).emit('receive-conversation-message', msgPayload);
+                    });
+                } else {
+                    io.to(conversationId).emit('receive-conversation-message', msgPayload);
+                }
 
             } catch (err) {
                 console.error('Error saving or broadcasting conversation message:', err);
             }
         });
 
-        // Handle Legacy Group Message
-        socket.on('message', async (data) => {
+        // Handle Direct Messages (Fallback/Direct Routing)
+        socket.on('private-message', async ({ targetUserId, message, conversationId }) => {
             try {
-                const newMsg = await Message.create({
-                    sender: username,
-                    senderId: userId,
-                    message: data.message,
-                    isPrivate: false
-                })
+                const targetId = conversationId || targetUserId;
 
-                socket.broadcast.emit('chat-message', {
-                    _id: newMsg._id,
-                    sender: username,
-                    senderId: userId,
-                    message: newMsg.message,
-                    createdAt: newMsg.createdAt,
-                    isPrivate: false
-                })
-            } catch (err) {
-                console.error('Group message error:', err)
-            }
-        })
-
-        // Handle Legacy Direct Message (DM)
-        socket.on('private-message', async ({ targetUserId, message }) => {
-            try {
                 const newMsg = await Message.create({
+                    conversationId: targetId,
                     sender: username,
                     senderId: userId,
                     recipientId: targetUserId,
                     message: message,
                     isPrivate: true
-                })
+                });
 
                 const msgData = {
                     _id: newMsg._id,
+                    conversationId: targetId,
                     sender: username,
                     senderId: userId,
                     recipientId: targetUserId,
                     message: newMsg.message,
                     createdAt: newMsg.createdAt,
                     isPrivate: true
-                }
+                };
 
-                // Send to recipient sockets
-                const targetSockets = connectedUsers[targetUserId]?.sockets || []
+                // Send to recipient's active socket connections
+                const targetSockets = connectedUsers[targetUserId]?.sockets || [];
                 targetSockets.forEach(socketId => {
-                    io.to(socketId).emit('private-message', msgData)
-                })
+                    io.to(socketId).emit('receive-conversation-message', msgData);
+                });
 
-                // Send back to sender sockets
-                const senderSockets = connectedUsers[userId]?.sockets || []
+                // Send back to sender's active socket connections
+                const senderSockets = connectedUsers[userId]?.sockets || [];
                 senderSockets.forEach(socketId => {
-                    io.to(socketId).emit('private-message', msgData)
-                })
+                    io.to(socketId).emit('receive-conversation-message', msgData);
+                });
 
             } catch (err) {
-                console.error('Private message error:', err)
+                console.error('Private message error:', err);
             }
-        })
+        });
 
         // Handle Disconnect
         socket.on('disconnect', () => {
             if (connectedUsers[userId]) {
-                connectedUsers[userId].sockets = connectedUsers[userId].sockets.filter(id => id !== socket.id)
+                connectedUsers[userId].sockets = connectedUsers[userId].sockets.filter(id => id !== socket.id);
                 if (connectedUsers[userId].sockets.length === 0) {
-                    delete connectedUsers[userId]
+                    delete connectedUsers[userId];
                 }
             }
-            broadcastUserList()
-            io.emit('clients-total', io.engine.clientsCount)
-        })
-    })
-}
+            broadcastUserList();
+            io.emit('clients-total', io.engine.clientsCount);
+        });
+    });
+};

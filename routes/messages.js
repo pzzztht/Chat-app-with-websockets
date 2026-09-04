@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const Message = require('../models/Message');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secretkey';
@@ -19,12 +20,23 @@ router.get('/filtered', async (req, res) => {
 
         if (!targetId || targetId === 'all' || targetId === 'group') {
             // Group / Public chat filter
-            filter = { isPrivate: false, conversationId: { $exists: false } };
+            filter = {
+                isPrivate: false,
+                $or: [
+                    { conversationId: 'group' },
+                    { conversationId: { $exists: false } }
+                ]
+            };
         } else {
             // Find messages by conversationId or direct fallback match
+            const conversationIds = [targetId];
+            if (mongoose.Types.ObjectId.isValid(targetId)) {
+                conversationIds.push(new mongoose.Types.ObjectId(targetId));
+            }
+
             filter = {
                 $or: [
-                    { conversationId: targetId },
+                    { conversationId: { $in: conversationIds } },
                     { senderId: decoded.id, recipientId: targetId },
                     { senderId: targetId, recipientId: decoded.id }
                 ]
