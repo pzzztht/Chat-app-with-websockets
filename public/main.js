@@ -8,6 +8,7 @@ let currentUser = JSON.parse(localStorage.getItem('user')) || null;
 let socket = null;
 let currentConversationId = null;
 let isLoginMode = true;
+let searchRequestId = 0;
 
 // Audio Notification Tone
 const messageTone = new Audio('/message-tone.mp3');
@@ -365,6 +366,7 @@ function setupSearchListener() {
         searchInput.addEventListener('input', (e) => {
             const query = e.target.value.trim();
             if (!query) {
+                searchRequestId++;
                 loadConversations();
             } else {
                 handleUserSearch(query);
@@ -374,21 +376,24 @@ function setupSearchListener() {
 }
 
 async function handleUserSearch(query) {
+    const requestId = ++searchRequestId;
+    const container = getListContainer();
+    if (!container) return;
+
     try {
         const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
-        if (!res.ok) return;
-        const users = await res.json();
+        const data = await res.json();
+        if (requestId !== searchRequestId) return;
+        if (!res.ok) throw new Error(data.error || 'Search failed');
 
-        const container = getListContainer();
-        if (!container) return;
         container.innerHTML = '';
 
         const userId = currentUser.id || currentUser._id;
-        users.forEach(u => {
-            if (String(u._id) === String(userId)) return;
+        const matchingUsers = data.filter(u => String(u._id) !== String(userId));
 
+        matchingUsers.forEach(u => {
             const avatarSrc = u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.username)}`;
             const li = document.createElement('li');
             li.className = 'user-item';
@@ -402,8 +407,21 @@ async function handleUserSearch(query) {
             li.onclick = () => createOrOpenConversation(u._id, u.username);
             container.appendChild(li);
         });
+
+        if (matchingUsers.length === 0) {
+            const emptyState = document.createElement('li');
+            emptyState.className = 'search-empty-state';
+            emptyState.textContent = 'No users found';
+            container.appendChild(emptyState);
+        }
     } catch (err) {
         console.error('Search error:', err);
+        if (requestId !== searchRequestId) return;
+        container.innerHTML = '';
+        const errorState = document.createElement('li');
+        errorState.className = 'search-empty-state';
+        errorState.textContent = err.message;
+        container.appendChild(errorState);
     }
 }
 
